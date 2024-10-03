@@ -1,5 +1,4 @@
 #include "main.h"
-#include "stm32f7xx_hal.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,9 +10,13 @@ UART_HandleTypeDef huart1;
 #define FLASH_SECTOR FLASH_SECTOR_1
 #define FLASH_ADDRESS 0x08008000
 
+// Default PWM settings as constants
+#define DEFAULT_PWM_FREQUENCY 200
+#define DEFAULT_PWM_DUTY_CYCLE 70
+
 // Default PWM settings
-uint32_t pwm_frequency = 200;
-uint32_t pwm_duty_cycle = 70;
+uint32_t pwm_frequency = DEFAULT_PWM_FREQUENCY;
+uint32_t pwm_duty_cycle = DEFAULT_PWM_DUTY_CYCLE;
 
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
@@ -67,6 +70,17 @@ int main(void) {
 }
 
 void update_pwm(void) {
+	if (pwm_duty_cycle == 0) {
+		HAL_TIM_PWM_Stop(&htim2, TIM_CHANNEL_1);
+		HAL_GPIO_WritePin(GPIOI, GPIO_PIN_1, GPIO_PIN_RESET);
+		return;
+	}
+
+	// If PWM was previously stopped, restart it
+	if (HAL_TIM_PWM_GetState(&htim2) != HAL_TIM_STATE_BUSY) {
+		HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
+	}
+
 	uint32_t timer_clock = HAL_RCC_GetPCLK2Freq();
 	uint32_t prescaler = 1;
 	uint32_t period;
@@ -137,8 +151,8 @@ void process_command(char *cmd) {
 			sprintf(response, "Error: Invalid duty cycle\r\n");
 		}
 	} else if (strcmp(cmd, "RESET") == 0) {
-		pwm_frequency = 200;
-		pwm_duty_cycle = 70;
+		pwm_frequency = DEFAULT_PWM_FREQUENCY;
+		pwm_duty_cycle = DEFAULT_PWM_DUTY_CYCLE;
 		update_pwm();
 		save_settings();
 		sprintf(response, "Settings reset to default\r\n");
@@ -233,7 +247,7 @@ static void MX_TIM2_Init(void) {
 	}
 
 	sConfigOC.OCMode = TIM_OCMODE_PWM1;
-	sConfigOC.Pulse = 0;  // We'll update this in update_pwm()
+	sConfigOC.Pulse = 0;
 	sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
 	sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
 	sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
